@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { MultiSelect } from "@/components/ui/multi-select"
 
 // Mock data (same as before)
 const mockLeads = [
@@ -39,29 +40,6 @@ const leadStatusData = [
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042']
 
-interface User {
-  username: string;
-  role: string;
-  locations?: number[];
-}
-
-interface Location {
-  number: number;
-  name: string;
-  countyNumber: number;
-  areaCode: string;
-  postalCodes: string[];
-}
-
-interface Lead {
-  id: number;
-  Kundenavn: string;
-  Telefon: string;
-  Epost: string;
-  date: string;
-  // Add other fields as needed
-}
-
 export default function Dashboard() {
   const [searchTerm, setSearchTerm] = useState('')
   const [sortBy, setSortBy] = useState('date')
@@ -69,37 +47,20 @@ export default function Dashboard() {
   const [chartTimeframe, setChartTimeframe] = useState('weekly')
   const [isLeadsPaused, setIsLeadsPaused] = useState(false)
   const [showPauseDialog, setShowPauseDialog] = useState(false)
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] = useState(null)
   const router = useRouter()
   const [showAddUserDialog, setShowAddUserDialog] = useState(false)
   const [newUsername, setNewUsername] = useState('')
   const [newPassword, setNewPassword] = useState('')
-  const [locations, setLocations] = useState<Location[]>([])
-  const [selectedLocation, setSelectedLocation] = useState<number | ''>('')
-  const [userLocation, setUserLocation] = useState<Location | null>(null)
-  const [leads, setLeads] = useState<Lead[]>([])
-  const [userLeads, setUserLeads] = useState<Lead[]>([])
-  const [totalLeads, setTotalLeads] = useState(0)
-  const [estimatedBill, setEstimatedBill] = useState(0)
+  const [selectedLocations, setSelectedLocations] = useState([])
+  const [locations, setLocations] = useState([])
 
   useEffect(() => {
     const checkAuth = async () => {
       const response = await fetch('/api/user')
       if (response.ok) {
-        const userData: User = await response.json()
+        const userData = await response.json()
         setUser(userData)
-
-        // Fetch location data if user has a location
-        if (userData.locations && userData.locations.length > 0) {
-          const locationResponse = await fetch('/api/locations')
-          if (locationResponse.ok) {
-            const locationsData: Location[] = await locationResponse.json()
-            const userLocationData = locationsData.find(loc => loc.number === userData.locations![0])
-            if (userLocationData) {
-              setUserLocation(userLocationData)
-            }
-          }
-        }
       } else {
         router.push('/login')
       }
@@ -107,51 +68,20 @@ export default function Dashboard() {
     checkAuth()
 
     // Fetch locations
-    fetch('/api/locations')
+    fetch('/location/locations.json')
       .then(response => response.json())
-      .then((data: Location[]) => {
-        console.log('Fetched locations:', data)
-        setLocations(data)
+      .then(data => {
+        setLocations(data.map(location => ({ value: location.name, label: location.name })))
       })
       .catch(error => console.error('Error fetching locations:', error))
-
-    // Fetch leads
-    fetch('/api/leads')
-      .then(response => response.json())
-      .then((data: Lead[]) => {
-        console.log('Fetched leads:', data)
-        setLeads(data)
-      })
-      .catch(error => console.error('Error fetching leads:', error))
   }, [router])
 
-  useEffect(() => {
-    // Fetch leads for the current user
-    const fetchUserLeads = async () => {
-      if (user && user.locations) {
-        try {
-          const response = await fetch('/api/leads')
-          if (response.ok) {
-            const allLeads: Lead[] = await response.json()
-            const userLocationLeads = allLeads.filter(lead => 
-              user.locations!.includes(parseInt(lead.Postnummer.substring(0, 2)))
-            )
-            setUserLeads(userLocationLeads)
-            setTotalLeads(userLocationLeads.length)
-            setEstimatedBill(userLocationLeads.length * 150) // 150 NOK per lead
-          }
-        } catch (error) {
-          console.error('Error fetching user leads:', error)
-        }
-      }
-    }
+  const filteredLeads = mockLeads.filter(lead =>
+    lead.name.toLowerCase().includes(searchTerm.toLowerCase())
+  ).sort((a, b) => a[sortBy].localeCompare(b[sortBy]))
 
-    fetchUserLeads()
-  }, [user])
-
-  const filteredLeads = leads.filter(lead =>
-    lead.Kundenavn.toLowerCase().includes(searchTerm.toLowerCase())
-  ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  const totalLeads = mockLeads.length
+  const estimatedBill = totalLeads * 150 // 150 NOK per lead
 
   const handleLogout = async () => {
     const response = await fetch('/api/logout', { method: 'POST' })
@@ -165,7 +95,7 @@ export default function Dashboard() {
     'Juli', 'August', 'September', 'Oktober', 'November', 'Desember'
   ]
 
-  const formatChartData = (data: { date: string; leads: number }[], timeframe: string): { date: string; leads: number }[] => {
+  const formatChartData = (data, timeframe) => {
     if (timeframe === 'daily') {
       return data.map(item => ({
         ...item,
@@ -206,26 +136,20 @@ export default function Dashboard() {
   const expectedInvoiceDate = nextMonth.toLocaleDateString('no-NO', { year: 'numeric', month: 'long', day: 'numeric' })
 
   const handleAddUser = async () => {
-    try {
-      console.log('Adding user with location number:', selectedLocation)
-      const response = await fetch('/api/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: newUsername, password: newPassword, locations: [selectedLocation] }),
-      })
+    const response = await fetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: newUsername, password: newPassword, locations: selectedLocations }),
+    })
 
-      if (response.ok) {
-        setShowAddUserDialog(false)
-        setNewUsername('')
-        setNewPassword('')
-        setSelectedLocation('')
-        console.log('User added successfully')
-      } else {
-        const errorData = await response.json()
-        console.error('Error adding user:', errorData)
-      }
-    } catch (error) {
-      console.error('Error adding user:', error)
+    if (response.ok) {
+      setShowAddUserDialog(false)
+      setNewUsername('')
+      setNewPassword('')
+      setSelectedLocations([])
+      // You might want to show a success message here
+    } else {
+      // Handle error (show error message)
     }
   }
 
@@ -295,7 +219,7 @@ export default function Dashboard() {
         </div>
 
         {/* Admin Panel (only visible for superadmin) */}
-        {user?.role === 'superadmin' && (
+        {user.role === 'superadmin' && (
           <Card className="mb-6">
             <CardHeader>
               <CardTitle>Admin Panel</CardTitle>
@@ -307,69 +231,6 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         )}
-
-        {/* Add New User Dialog */}
-        <Dialog open={showAddUserDialog} onOpenChange={setShowAddUserDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Legg til ny bruker</DialogTitle>
-              <DialogDescription>
-                Fyll ut informasjonen nedenfor for å legge til en ny bruker.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="username" className="text-right">
-                  Brukernavn
-                </Label>
-                <Input
-                  id="username"
-                  value={newUsername}
-                  onChange={(e) => setNewUsername(e.target.value)}
-                  className="col-span-3"
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="password" className="text-right">
-                  Passord
-                </Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="col-span-3"
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="location" className="text-right">
-                  Lokasjon
-                </Label>
-                <Select
-                  value={selectedLocation.toString()}
-                  onValueChange={(value) => {
-                    console.log('Selected location number:', value)
-                    setSelectedLocation(Number(value))
-                  }}
-                >
-                  <SelectTrigger className="col-span-3">
-                    <SelectValue placeholder="Velg lokasjon" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {locations.map((location) => (
-                      <SelectItem key={location.number} value={location.number.toString()}>
-                        {location.name} ({location.number})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button onClick={handleAddUser}>Legg til bruker</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
 
         {/* Pause/Start Leads Component */}
         <Card className="mb-6">
@@ -389,14 +250,7 @@ export default function Dashboard() {
               )}
             </Button>
             <span className="text-sm text-gray-600">
-              {userLocation ? (
-                <>
-                  Du er tildelt <span className="font-semibold">{userLocation.name}</span> med{' '}
-                  <span className="font-semibold">{userLocation.postalCodes.length}</span> postnummer
-                </>
-              ) : (
-                'Ingen lokasjon tildelt'
-              )}
+              Du er tildelt <span id="current-city" className="font-semibold">Oslo</span> med <span id="postal-code" className="font-semibold">20</span> postnummer
             </span>
           </CardContent>
         </Card>
@@ -421,7 +275,8 @@ export default function Dashboard() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="date">Dato</SelectItem>
-                  <SelectItem value="Kundenavn">Navn</SelectItem>
+                  <SelectItem value="name">Navn</SelectItem>
+                  <SelectItem value="status">Status</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -432,6 +287,7 @@ export default function Dashboard() {
                 <TableRow>
                   <TableHead>Navn</TableHead>
                   <TableHead>Dato</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Handlinger</TableHead>
                 </TableRow>
               </TableHeader>
@@ -440,14 +296,19 @@ export default function Dashboard() {
                   <TableRow key={lead.id}>
                     <TableCell>
                       <div className="flex flex-col">
-                        <span>{lead.Kundenavn}</span>
+                        <span>{lead.name}</span>
                         <div className="flex space-x-2 text-gray-500">
-                          <a href={`tel:${lead.Telefon}`}><Phone className="h-4 w-4" /></a>
-                          <a href={`mailto:${lead.Epost}`}><Mail className="h-4 w-4" /></a>
+                          <a href={`tel:${lead.phone}`}><Phone className="h-4 w-4" /></a>
+                          <a href={`mailto:${lead.email}`}><Mail className="h-4 w-4" /></a>
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>{new Date(lead.date).toLocaleDateString('no-NO')}</TableCell>
+                    <TableCell>{lead.date}</TableCell>
+                    <TableCell>
+                      <span className="px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                        {lead.status}
+                      </span>
+                    </TableCell>
                     <TableCell>
                       <div className="flex space-x-2">
                         <Button variant="ghost" size="sm"><ThumbsUp className="h-4 w-4" /></Button>

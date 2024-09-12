@@ -1,0 +1,23 @@
+[
+  {
+    "username": "bergen",
+    "password": "bergen",
+    "role": "user"
+  },
+  {
+    "username": "Seljord",
+    "password": "Seljord",
+    "role": "user",
+    "locations": [
+      "Seljord"
+    ]
+  },
+  {
+    "username": "stavanger",
+    "password": "stavanger",
+    "role": "user",
+    "locations": [
+      1103
+    ]
+  }
+]
