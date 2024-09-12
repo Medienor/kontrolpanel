@@ -40,6 +40,18 @@ const leadStatusData = [
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042']
 
+// Define an interface for the location object
+interface Location {
+  name: string;
+  // Add other properties if needed
+}
+
+// Add a new interface for the location options
+interface LocationOption {
+  value: string;
+  label: string;
+}
+
 export default function Dashboard() {
   const [searchTerm, setSearchTerm] = useState('')
   const [sortBy, setSortBy] = useState('date')
@@ -53,7 +65,7 @@ export default function Dashboard() {
   const [newUsername, setNewUsername] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [selectedLocations, setSelectedLocations] = useState([])
-  const [locations, setLocations] = useState([])
+  const [locations, setLocations] = useState<LocationOption[]>([])
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -68,10 +80,10 @@ export default function Dashboard() {
     checkAuth()
 
     // Fetch locations
-    fetch('/location/locations.json')
+    fetch('/api/locations')
       .then(response => response.json())
-      .then(data => {
-        setLocations(data.map(location => ({ value: location.name, label: location.name })))
+      .then((data: Location[]) => {
+        setLocations(data.map((location: Location) => ({ value: location.name, label: location.name })))
       })
       .catch(error => console.error('Error fetching locations:', error))
   }, [router])
