@@ -7,8 +7,8 @@ const nextConfig = {
     // !! WARN !!
     ignoreBuildErrors: true,
   },
-  server: {
-    port: 3001, // Change this to any available port
+  experimental: {
+    serverComponentsExternalPackages: ['next'],
   },
 };
 
